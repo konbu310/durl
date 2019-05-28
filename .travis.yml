@@ -1,0 +1,61 @@
+# Based on the "trust" template v0.1.2
+# https://github.com/japaric/trust/tree/v0.1.2
+
+dist: trusty
+language: rust
+services: docker
+rust:
+  - stable
+sudo: required
+env:
+  global:
+    - NAME=durl
+
+# LinuxとmacOSとWindowsの環境でビルドする
+matrix:
+  include:
+    - env: TARGET=x86_64-unknown-linux-musl
+    - env: TARGET=x86_64-apple-darwin
+      os: osx
+    - env: TARGET=x86_64-pc-windows-gnu
+
+before_install:
+  # ビルドツールをインストールする前にRustのツールチェインを最新版に更新
+  - rustup self update
+
+install:
+  # crossツールのインストール
+  - source ~/.cargo/env
+  - cargo install --fore cross
+
+script:
+  # cacheが有効に鳴るようにリリースビルドでテストを実行
+  - cross test --target $TARGET --release
+
+before_deploy:
+  # リリースビルドを実行
+  - cross build --target $TARGET --release
+  - bin=$NAME
+  # Windowのみ拡張子のexeがバイナリネームに含まれる
+  - if [[ $TARGET = "x86_64-pc-windows-gnu" ]]; then bin=$NAME.exe; fi
+  # ソースディレクトリ直下に配布用のパッケージを生成
+  - tar czf $NAME-$TRAVIS_TAG-$TARGET.tar.gz -C target/$TARGET/release $bin
+
+deploy:
+  api_key:
+    secure: TKQcwtyuSve7KhI5aV6zTCqXm+cpfNe0ic7vvFRFS4stCmJSzjX9dNtwtTjy5Xin4V6uL0g9HxHLx2TAfbLUdhjjuxYtOM4/MeemNyPrFNABQGPbO7gE/xkRVsxE8LZ0BvOlorekpfePXZal1vy123VSW/hgFEHRa89t57oS1Dd53pC/29KhmUI8tOFwIWjsfwOzhfWZ2nEkSPbEJIRLhuKsIQmF/0923aUdqmR9DctQz2zpmHh7nj6nga7dCK+UGsxMl9iywSdBA4ConcSsHFtd9k0DfJSWawyvkOEn5pmA1ohMrjgme1DAcvwcgXD/50rj2VmnVPDP3O5P1LV+zDoNPTs4YaiBoR+e/IEpFia59bLin4fdGlkeGDv+AWeIrLfBFEHXP7D7J0gRhzRV3/ieM26Lr8xau/R8MlBxU8Nmkgi6x1yMa64RS62133N02w9xOZq8vQiWWI8SOBOs3jBHc8MRitfRbvllBM5vEDlh5enikwmcMQJruQFDUd2TyIZYBxrKdVuF8tPyOCQOiPzaN956pbHoD5uI0nqHusJvhAIZU2iObGihIWJSl3GdgF0rc3dGEjOccZRnMqjTbYukwHX+7MGT9oH2l/rWuN8SXLUYFrQ5begMZNxS6MRZLb838A+FTwWayatApI9lpyGxU5GIbimFy4e1qyrS7eQ=
+  file_glob: true
+  file: $NAME-$TRAVIS_TAG-$TARGET.*
+  on:
+    tags: true
+  provider: releases
+  skip_cleanup: true
+
+cache: cargo
+before_cache:
+  - chmod -R a+r $HOME/.cargo
+
+branches:
+  only:
+    - /^v?\d+\.\d+\.\d+.*$/
+    - master
